@@ -1,18 +1,14 @@
-# .pipeline/config.yml (jump repo)
-
 general:
-  # We'll generate this file from the Bitbucket repo during Init
   pipelineConfigFile: dynamicConfig.yml
 
 stages:
-  Init:
-    # Run this before any other stage so the workspace contains the Bitbucket sources
+  Build:
     runFirstCommands: |
       set -e
-      echo "== Init: preparing workspace from corporate Bitbucket =="
+      echo "== Bootstrap: start =="
 
       if [ -z "${BITBUCKET_TOKEN}" ]; then
-        echo "ERROR: BITBUCKET_TOKEN is not set (add the Secret Text credential and map it to BITBUCKET_TOKEN in the job)."
+        echo "ERROR: BITBUCKET_TOKEN is not set (map Secret Text credential to BITBUCKET_TOKEN in job)."
         exit 1
       fi
 
@@ -36,29 +32,27 @@ stages:
       fi
 
       echo "[3/3] Syncing Bitbucket sources into workspace root so build steps see mta.yaml ..."
-      rsync -a --delete source/ ./
+      shopt -s dotglob || true
+      cp -a source/* ./
       rm -rf source
 
-  Build:
-    # Nothing special here; after Init rsync, mta.yaml is at workspace root
+      echo "== Bootstrap: done =="
+
+    # keep the rest of your toggles here if you want
     mavenExecuteStaticCodeChecks: false
     npmExecuteLint: false
 
   Acceptance:
-    # Leave stage toggles minimal in the jump repo; details live in dynamicConfig.yml
     cloudFoundryDeploy: true
     npmExecuteEndToEndTests: false
 
   Malware Scan:
     malwareExecuteScan: false
-
   Release:
     cloudFoundryDeploy: false
     tmsExport: false
     tmsUpload: false
-
   Additional Unit Tests:
     npmExecuteScripts: false
-
   Compliance:
     sonarExecuteScan: false
