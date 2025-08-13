@@ -3,7 +3,7 @@ general:
 
 stages:
   Build:
-    runFirstCommands: |
+    runFirst: |
       set -e
       echo "== Bootstrap: start =="
 
