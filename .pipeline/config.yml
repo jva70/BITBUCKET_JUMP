@@ -1,58 +1,68 @@
 general:
-  pipelineConfigFile: dynamicConfig.yml
+  buildTool: "mta"
+
+service:
+  buildToolVersion: "MBTJ21N22"   # keeps the mtaBuild step on Java 21 / Node 22 image
+  stages:
+    Build:
+      credentialVariables:
+        - name: "BITBUCKET_TOKEN"   # becomes $BITBUCKET_TOKEN in runFirst container
+          credentialId: "bitbucket-token"
+      runFirst:
+        command: |
+          set -e
+          echo "== Bootstrap: start =="
+          if [ -z "${BITBUCKET_TOKEN}" ]; then
+            echo "ERROR: BITBUCKET_TOKEN is not set (map a Secret Text credential)."
+            exit 1
+          fi
+
+          # The additional-commands container is Node 22 (separate pod)
+          node -v || true
+          printenv | sort | sed -n '1,120p'
+
+          # Tell git to use Bearer auth for your Bitbucket host
+          git config --global http.https://devstack.vwgroup.com/.extraheader "Authorization: Bearer ${BITBUCKET_TOKEN}"
+
+          echo "[1/3] Cloning corporate repo into ./source ..."
+          rm -rf source
+          git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
+
+          echo "[2/3] Copy a few breadcrumbs so we can see them later:"
+          mkdir -p cloudcitransfer
+          cp -a source/. .   || true              # NOTE: this only affects THIS container
+          cp -a source/. cloudcitransfer/. || true
+
+          echo "[3/3] Prove what we got:"
+          ls -la | sed -n '1,120p'
+          echo "--- cloudcitransfer top ---"
+          ls -la cloudcitransfer | sed -n '1,120p'
+          echo "== Bootstrap: done =="
 
 stages:
   Build:
-    runFirst: |
-      set -e
-      echo "== Bootstrap: start =="
-
-      if [ -z "${BITBUCKET_TOKEN}" ]; then
-        echo "ERROR: BITBUCKET_TOKEN is not set (map Secret Text credential to BITBUCKET_TOKEN in job)."
-        exit 1
-      fi
-
-      # Make git send Authorization: Bearer <token> to your Bitbucket host
-      git config --global http.https://devstack.vwgroup.com/.extraheader "Authorization: Bearer ${BITBUCKET_TOKEN}"
-
-      echo "[1/3] Cloning corporate repo into ./source ..."
-      rm -rf source
-      git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
-
-      echo "[2/3] Writing pipeline overlay dynamicConfig.yml from Bitbucket repo ..."
-      if [ -f source/.ci/params.yml ]; then
-        cp source/.ci/params.yml dynamicConfig.yml
-        echo "dynamicConfig.yml written from source/.ci/params.yml"
-      elif [ -f source/.pipeline/config.yml ]; then
-        cp source/.pipeline/config.yml dynamicConfig.yml
-        echo "dynamicConfig.yml written from source/.pipeline/config.yml"
-      else
-        echo "ERROR: no pipeline config found in source/.ci/params.yml or source/.pipeline/config.yml"
-        exit 1
-      fi
-
-      echo "[3/3] Syncing Bitbucket sources into workspace root so build steps see mta.yaml ..."
-      shopt -s dotglob || true
-      cp -a source/* ./
-      rm -rf source
-
-      echo "== Bootstrap: done =="
-
-    # keep the rest of your toggles here if you want
+    # keep defaults; we only turned on runFirst above
     mavenExecuteStaticCodeChecks: false
     npmExecuteLint: false
 
   Acceptance:
-    cloudFoundryDeploy: true
+    cloudFoundryDeploy: false
     npmExecuteEndToEndTests: false
 
   Malware Scan:
     malwareExecuteScan: false
+
   Release:
     cloudFoundryDeploy: false
     tmsExport: false
     tmsUpload: false
+
   Additional Unit Tests:
     npmExecuteScripts: false
+
   Compliance:
     sonarExecuteScan: false
+
+steps:
+  artifactPrepareVersion:
+    versioningType: "cloud_noTag"
