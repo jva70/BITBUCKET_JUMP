@@ -72,3 +72,5 @@ stages:
 steps:
   artifactPrepareVersion:
     versioningType: "cloud_noTag"
+  mtaBuild:
+    path: "cloudcitransfer"
