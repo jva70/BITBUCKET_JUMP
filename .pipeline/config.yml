@@ -1,43 +1,64 @@
-# .pipeline/config.yml (bootstrap repo)
-# This bootstrap config:
-# 1) runs a step to configure git to send a Bearer header
-# 2) clones the corporate Bitbucket repo into ./source
-# 3) copies the corporate repo's pipeline params into dynamicConfig.yml
-# 4) sets pipelineConfigFile so the pipeline engine uses dynamicConfig.yml as an overlay
+# .pipeline/config.yml (jump repo)
+
 general:
-  # the file that will be written by the bootstrap step and then used as the pipeline overlay
+  # We'll generate this file from the Bitbucket repo during Init
   pipelineConfigFile: dynamicConfig.yml
+
 stages:
-  Bootstrap:
-    type: custom
-    steps:
-      - name: Clone Corporate Bitbucket repository (using Bearer token)
-        # use shell script style to set the git extraheader and clone
-        script: |
-          set -e
-          echo "Checking BITBUCKET_TOKEN presence..."
-          if [ -z "${BITBUCKET_TOKEN}" ]; then
-            echo "ERROR: BITBUCKET_TOKEN is not set. Abort."
-            exit 1
-          fi
-          # Configure git to send the Authorization: Bearer header for your Bitbucket host.
-          # use the base host URL so it applies to all repo paths on that host:
-          git config --global http.https://devstack.vwgroup.com/.extraheader "Authorization: Bearer ${BITBUCKET_TOKEN}"
-          echo "Cloning corporate repo into ./source ..."
-          git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
-          echo "Copying corporate pipeline config (if present) to dynamicConfig.yml ..."
-          # preferred location in corporate repo: source/.ci/params.yml
-          if [ -f source/.ci/params.yml ]; then
-            cp source/.ci/params.yml dynamicConfig.yml
-            echo "dynamicConfig.yml written from source/.ci/params.yml"
-          elif [ -f source/.pipeline/config.yml ]; then
-            cp source/.pipeline/config.yml dynamicConfig.yml
-            echo "dynamicConfig.yml written from source/.pipeline/config.yml"
-          else
-            echo "No corporate pipeline config found in source/.ci/params.yml or source/.pipeline/config.yml"
-            # optional: exit non-zero to fail early
-            exit 1
-          fi
-# Optionally include a tiny default stage so the job shows content in the GUI prior to the overlay:
-  Default:
-    type: none
+  Init:
+    # Run this before any other stage so the workspace contains the Bitbucket sources
+    runFirstCommands: |
+      set -e
+      echo "== Init: preparing workspace from corporate Bitbucket =="
+
+      if [ -z "${BITBUCKET_TOKEN}" ]; then
+        echo "ERROR: BITBUCKET_TOKEN is not set (add the Secret Text credential and map it to BITBUCKET_TOKEN in the job)."
+        exit 1
+      fi
+
+      # Make git send Authorization: Bearer <token> to your Bitbucket host
+      git config --global http.https://devstack.vwgroup.com/.extraheader "Authorization: Bearer ${BITBUCKET_TOKEN}"
+
+      echo "[1/3] Cloning corporate repo into ./source ..."
+      rm -rf source
+      git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
+
+      echo "[2/3] Writing pipeline overlay dynamicConfig.yml from Bitbucket repo ..."
+      if [ -f source/.ci/params.yml ]; then
+        cp source/.ci/params.yml dynamicConfig.yml
+        echo "dynamicConfig.yml written from source/.ci/params.yml"
+      elif [ -f source/.pipeline/config.yml ]; then
+        cp source/.pipeline/config.yml dynamicConfig.yml
+        echo "dynamicConfig.yml written from source/.pipeline/config.yml"
+      else
+        echo "ERROR: no pipeline config found in source/.ci/params.yml or source/.pipeline/config.yml"
+        exit 1
+      fi
+
+      echo "[3/3] Syncing Bitbucket sources into workspace root so build steps see mta.yaml ..."
+      rsync -a --delete source/ ./
+      rm -rf source
+
+  Build:
+    # Nothing special here; after Init rsync, mta.yaml is at workspace root
+    mavenExecuteStaticCodeChecks: false
+    npmExecuteLint: false
+
+  Acceptance:
+    # Leave stage toggles minimal in the jump repo; details live in dynamicConfig.yml
+    cloudFoundryDeploy: true
+    npmExecuteEndToEndTests: false
+
+  Malware Scan:
+    malwareExecuteScan: false
+
+  Release:
+    cloudFoundryDeploy: false
+    tmsExport: false
+    tmsUpload: false
+
+  Additional Unit Tests:
+    npmExecuteScripts: false
+
+  Compliance:
+    sonarExecuteScan: false
