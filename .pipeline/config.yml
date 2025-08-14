@@ -1,8 +1,6 @@
 ---
 general:
   buildTool: "mta"
-  # Tell Piper to read the overlay we create during runFirst
-  pipelineConfigFile: "dynamicConfig.yml"
 
 service:
   buildToolVersion: "MBTJ21N22"
@@ -15,41 +13,22 @@ service:
       runFirst:
         command: |
           set -e
-          echo "== Bootstrap: start =="
-
+          echo "== Bootstrap corporate repo =="
           if [ -z "${BITBUCKET_TOKEN}" ]; then
-            echo "ERROR: BITBUCKET_TOKEN is not set (map a Secret Text credential)."
-            exit 1
+            echo "ERROR: BITBUCKET_TOKEN not set"; exit 1
           fi
-
-          # Make git send Authorization: Bearer <token> to your Bitbucket host
           git config --global http.https://devstack.vwgroup.com/.extraheader "Authorization: Bearer ${BITBUCKET_TOKEN}"
-
-          echo "[1/3] Cloning corporate repo into ./source ..."
           rm -rf source
           git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
 
-          echo "[2/3] Writing pipeline overlay dynamicConfig.yml from Bitbucket repo ..."
-          if [ -f source/.ci/params.yml ]; then
-            cp source/.ci/params.yml dynamicConfig.yml
-            echo "dynamicConfig.yml written from source/.ci/params.yml"
-          elif [ -f source/.pipeline/config.yml ]; then
-            cp source/.pipeline/config.yml dynamicConfig.yml
-            echo "dynamicConfig.yml written from source/.pipeline/config.yml"
-          else
-            echo "ERROR: no pipeline config found in source/.ci/params.yml or source/.pipeline/config.yml"
-            exit 1
-          fi
-
-          echo "[3/3] Syncing Bitbucket sources into workspace root so build steps see mta.yaml ..."
-          shopt -s dotglob || true
-          cp -a source/* ./
-
-          # Keep a copy for later stages; SAP CI/CD will unstash this back
+          # (optional) bring code to cloudcitransfer for build/deploy
           mkdir -p cloudcitransfer
           cp -a source/. cloudcitransfer/.
 
-          echo "== Bootstrap: done =="
+          # Hand off pipeline config to the corporate one
+          mkdir -p .pipeline
+          cp -f source/.pipeline/config.yml .pipeline/config.yml
+          echo "== Handed off to corporate .pipeline/config.yml =="
 
 stages:
   Build:
