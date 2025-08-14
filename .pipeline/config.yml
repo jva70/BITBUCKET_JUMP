@@ -21,14 +21,11 @@ service:
           rm -rf source
           git clone https://devstack.vwgroup.com/bitbucket/scm/vwskdevops/ibantest.git source
 
-          # (optional) bring code to cloudcitransfer for build/deploy
+          # bring code to cloudcitransfer for build/deploy
           mkdir -p cloudcitransfer
           cp -a source/. cloudcitransfer/.
 
-          # Hand off pipeline config to the corporate one
-          mkdir -p .pipeline
-          cp -f source/.pipeline/config.yml .pipeline/config.yml
-          echo "== Handed off to corporate .pipeline/config.yml =="
+          echo "== Source code from Bitbucket copied into cloudcitransfer =="
 
 stages:
   Build:
