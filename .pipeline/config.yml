@@ -35,7 +35,11 @@ stages:
     mavenExecuteStaticCodeChecks: false
     npmExecuteLint: false
   Acceptance:
-    cloudFoundryDeploy: false
+    cfApiEndpoint: "https://api.cf.eu10-004.hana.ondemand.com"
+    cfOrg: "VW_SK_klientportal-tst"
+    cfSpace: "DEV_Build_SPC"
+    deployType: "standard"
+    cloudFoundryDeploy: true
     npmExecuteEndToEndTests: false
   Malware Scan:
     malwareExecuteScan: false
